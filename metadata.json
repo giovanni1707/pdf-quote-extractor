@@ -1,0 +1,6 @@
+{
+  "name": "MULTIVAC Order List",
+  "description": "Fills in MULTIVAC Excel order-list templates from quotation PDFs with double extraction, Excel formatting preservation, and HyperFormula verification.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
