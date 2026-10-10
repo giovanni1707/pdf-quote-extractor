@@ -1,5 +1,5 @@
 {
   "functions": {
-    "api/extract.ts": { "maxDuration": 60 }
+    "api/extract.ts": { "maxDuration": 300 }
   }
 }

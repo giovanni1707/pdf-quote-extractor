@@ -113,19 +113,7 @@ export default function App() {
         body: JSON.stringify({ pdfBase64 }),
       });
 
-      const rawText = await response.text();
-      let data: any;
-      try {
-        data = JSON.parse(rawText);
-      } catch {
-        if (response.status === 504) {
-          throw new Error('The server timed out while reading the quotation. Please try again.');
-        }
-        if (response.status === 413) {
-          throw new Error('The PDF is too large to upload (server limit is about 4.5 MB). Please use a smaller file.');
-        }
-        throw new Error(`Server error (${response.status}). ${rawText.slice(0, 120)}`);
-      }
+      const data = await response.json();
 
       if (!response.ok || !data.success) {
         if (data.uncertainties && data.uncertainties.length > 0) {

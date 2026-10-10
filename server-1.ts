@@ -25,7 +25,7 @@ function getGenAI(): GoogleGenAI {
   });
 }
 
-async function callGeminiWithRetry(params: any, maxRetries = 3, initialDelay = 1000): Promise<any> {
+async function callGeminiWithRetry(params: any, maxRetries = 3, initialDelay = 1500): Promise<any> {
   const ai = getGenAI();
   let delay = initialDelay;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -226,14 +226,19 @@ Audit and extract every position with precision:
 5. Record ignored subtotal or comment lines in ignoredLines.
 6. If any line or value is ambiguous or degraded, report in unclear array. Never invent numbers.`;
 
-    const startedAt = Date.now();
-    const makeParams = (prompt: string) => ({
+    // Run Call 1 and Call 2 sequentially to avoid burst quota limits
+    const call1Res = await callGeminiWithRetry({
       model: 'gemini-3.8-flash',
       contents: [
         {
           parts: [
-            { inlineData: { mimeType: 'application/pdf', data: pdfBase64 } },
-            { text: prompt },
+            {
+              inlineData: {
+                mimeType: 'application/pdf',
+                data: pdfBase64,
+              },
+            },
+            { text: prompt1 },
           ],
         },
       ],
@@ -244,12 +249,30 @@ Audit and extract every position with precision:
       },
     });
 
-    // Run the two independent passes in PARALLEL so the total time is that of one call
-    // (sequential calls exceeded Vercel's function time limit -> 504).
-    const [call1Res, call2Res] = await Promise.all([
-      callGeminiWithRetry(makeParams(prompt1)),
-      callGeminiWithRetry(makeParams(prompt2)),
-    ]);
+    // Small delay between calls
+    await new Promise((r) => setTimeout(r, 600));
+
+    const call2Res = await callGeminiWithRetry({
+      model: 'gemini-3.8-flash',
+      contents: [
+        {
+          parts: [
+            {
+              inlineData: {
+                mimeType: 'application/pdf',
+                data: pdfBase64,
+              },
+            },
+            { text: prompt2 },
+          ],
+        },
+      ],
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: extractionSchema,
+        temperature: 0,
+      },
+    });
 
     const result1: QuotationExtraction = JSON.parse(call1Res.text || '{}');
     const result2: QuotationExtraction = JSON.parse(call2Res.text || '{}');
@@ -291,17 +314,6 @@ Audit and extract every position with precision:
     let finalExtraction: QuotationExtraction = result1;
 
     // If differences found, run Call 3 targeted reconciliation
-    const TIME_BUDGET_MS = Number(process.env.EXTRACT_TIME_BUDGET_MS || 150000);
-    if (differences.length > 0 && Date.now() - startedAt > TIME_BUDGET_MS) {
-      // Not enough time left for a third pass; return the discrepancies instead of timing out.
-      return res.json({
-        success: false,
-        uncertainties: differences,
-        extraction: result1,
-        message: 'Verification passes disagreed and there was no time left to reconcile. Please retry.',
-      });
-    }
-
     if (differences.length > 0) {
       console.log('Discrepancies found between Run 1 and Run 2, initiating Call 3 reconciliation:', differences);
       const prompt3 = `You are a senior auditor reconciling discrepancies between two extraction passes of this MULTIVAC quotation.
